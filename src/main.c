@@ -22,6 +22,6 @@ void main(void)
 
 	while (1) {
 		gui_update();
-		k_sleep(K_MSEC(10));
+		k_sleep(K_MSEC(2));
 	}
 }
