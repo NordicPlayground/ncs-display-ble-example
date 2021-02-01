@@ -4,7 +4,6 @@
 #include <lvgl.h>
 #include <stdio.h>
 #include <string.h>
-#include <zephyr.h>
 
 #define LOG_LEVEL CONFIG_LOG_DEFAULT_LEVEL
 #include <logging/log.h>
@@ -14,27 +13,37 @@ uint32_t count = 0U;
 char count_str[11] = {0};
 const struct device *display_dev;
 
+static gui_event_t m_gui_event;
+static gui_callback_t m_gui_callback = 0;
+
 char *on_off_strings[2] = {"On", "Off"};
 
 // GUI objects
-lv_obj_t * label_button, * label_led, * label_bt_state_hdr, * label_bt_state;
-lv_obj_t * btn1, * btn1_label;
-lv_obj_t * checkbox_led;
+lv_obj_t *label_button, *label_led, *label_bt_state_hdr, *label_bt_state;
+lv_obj_t *btn1, *btn1_label;
+lv_obj_t *checkbox_led;
 
 // Styles
-lv_style_t style_btn, style_label, style_checkbox;
+lv_style_t style_btn, style_label, style_label_value, style_checkbox;
 
 // Fonts
-LV_FONT_DECLARE(arial_20b);
+LV_FONT_DECLARE(arial_20bold);
+LV_FONT_DECLARE(calibri_20b);
+LV_FONT_DECLARE(calibri_20);
+LV_FONT_DECLARE(calibri_24b);
 
 static void on_button1(lv_obj_t *btn, lv_event_t event)
 {
 	static bool button_pressed = false;
 	if(event == LV_EVENT_CLICKED) {
 		if(btn == btn1){
-			printk("Button 1 pressed\n");
 			button_pressed = !button_pressed;
 			lv_label_set_text(btn1_label, on_off_strings[button_pressed ? 1 : 0]);
+			if(m_gui_callback) { 
+				m_gui_event.evt_type = GUI_EVT_BUTTON_PRESSED;
+				m_gui_event.button_checked = button_pressed;
+				m_gui_callback(&m_gui_event);
+			}
 		}
 	}
 }
@@ -54,7 +63,7 @@ static void init_styles(void)
 	lv_style_set_bg_grad_color(&style_label, LV_STATE_DEFAULT, LV_COLOR_GRAY);
 	lv_style_set_bg_grad_dir(&style_label, LV_STATE_DEFAULT, LV_GRAD_DIR_VER);
 	lv_style_set_pad_left(&style_label, LV_STATE_DEFAULT, 5);
-	lv_style_set_pad_top(&style_label, LV_STATE_DEFAULT, 5);
+	lv_style_set_pad_top(&style_label, LV_STATE_DEFAULT, 10);
 
 	/*Add a border*/
 	lv_style_set_border_color(&style_label, LV_STATE_DEFAULT, LV_COLOR_WHITE);
@@ -63,7 +72,21 @@ static void init_styles(void)
 
 	/*Set the text style*/
 	lv_style_set_text_color(&style_label, LV_STATE_DEFAULT, LV_COLOR_MAKE(0x00, 0x00, 0x30));
-	lv_style_set_text_font(&style_label, LV_STATE_DEFAULT, &arial_20b);
+	lv_style_set_text_font(&style_label, LV_STATE_DEFAULT, &calibri_20b);
+
+
+	/*Create a label value style*/
+	lv_style_init(&style_label_value);
+	lv_style_set_bg_opa(&style_label_value, LV_STATE_DEFAULT, LV_OPA_COVER);
+	lv_style_set_bg_color(&style_label_value, LV_STATE_DEFAULT, LV_COLOR_SILVER);
+	lv_style_set_bg_grad_color(&style_label_value, LV_STATE_DEFAULT, LV_COLOR_TEAL);
+	lv_style_set_bg_grad_dir(&style_label_value, LV_STATE_DEFAULT, LV_GRAD_DIR_VER);
+	lv_style_set_pad_left(&style_label_value, LV_STATE_DEFAULT, 5);
+	lv_style_set_pad_top(&style_label_value, LV_STATE_DEFAULT, 4);
+
+	/*Set the text style*/
+	lv_style_set_text_color(&style_label_value, LV_STATE_DEFAULT, LV_COLOR_MAKE(0x00, 0x00, 0x30));
+	lv_style_set_text_font(&style_label_value, LV_STATE_DEFAULT, &calibri_20);
 
 
 	/*Create a checkbox style*/
@@ -77,7 +100,7 @@ static void init_styles(void)
 
 	/*Set the text style*/
 	lv_style_set_text_color(&style_checkbox, LV_STATE_DEFAULT, LV_COLOR_MAKE(0x00, 0x00, 0x30));
-	lv_style_set_text_font(&style_checkbox, LV_STATE_DEFAULT, &arial_20b);
+	lv_style_set_text_font(&style_checkbox, LV_STATE_DEFAULT, &calibri_20b);
 
 	lv_style_set_outline_color(&style_checkbox, LV_STATE_DEFAULT, LV_COLOR_WHITE);
 
@@ -105,7 +128,7 @@ static void init_styles(void)
 
 	/*Set the text style*/
 	lv_style_set_text_color(&style_btn, LV_STATE_DEFAULT, LV_COLOR_TEAL);
-	lv_style_set_text_font(&style_btn, LV_STATE_DEFAULT, &arial_20b);
+	lv_style_set_text_font(&style_btn, LV_STATE_DEFAULT, &calibri_24b);
 
 	/*Make the button smaller when pressed*/
 	lv_style_set_transform_height(&style_btn, LV_STATE_PRESSED, -4);
@@ -140,10 +163,12 @@ static void init_styles(void)
 static void init_blinky_gui(void)
 {
 	label_button = lv_label_create(lv_scr_act(), NULL);
-	lv_label_set_long_mode(label_button, LV_LABEL_LONG_DOT);
+	lv_label_set_long_mode(label_button, LV_LABEL_LONG_CROP);
+	lv_label_set_align(label_button, LV_LABEL_ALIGN_CENTER); 
 	lv_obj_set_pos(label_button, 5, 5);
 	lv_obj_set_size(label_button, 150, 40);
 	lv_label_set_text(label_button, "Button");
+	
 	lv_obj_add_style(label_button, LV_LABEL_PART_MAIN, &style_label);
 
 	label_led = lv_label_create(lv_scr_act(), label_button);
@@ -156,10 +181,13 @@ static void init_blinky_gui(void)
 	lv_obj_set_size(label_bt_state_hdr, 200, 40);
 	lv_label_set_text(label_bt_state_hdr, "Bluetooth state");
 
-	label_bt_state = lv_label_create(lv_scr_act(), label_button);
-	lv_obj_set_pos(label_bt_state, 5, 200);
-	lv_obj_set_size(label_bt_state, 200, 40);
-	lv_label_set_text(label_bt_state, "Advertising");
+	label_bt_state = lv_label_create(lv_scr_act(), NULL);
+	lv_label_set_long_mode(label_bt_state, LV_LABEL_LONG_CROP);
+	lv_label_set_align(label_bt_state, LV_LABEL_ALIGN_CENTER); 
+	lv_obj_set_pos(label_bt_state, 10, 200);
+	lv_obj_set_size(label_bt_state, 190, 30);
+	lv_label_set_text(label_bt_state, "Idle");
+	lv_obj_add_style(label_bt_state, LV_LABEL_PART_MAIN, &style_label_value);
 
 	checkbox_led = lv_checkbox_create(lv_scr_act(), NULL);
 	lv_obj_set_pos(checkbox_led, 165, 75);
@@ -167,11 +195,12 @@ static void init_blinky_gui(void)
 	lv_checkbox_set_text(checkbox_led, "");
 	lv_checkbox_set_checked(checkbox_led, true);
 	lv_obj_add_style(checkbox_led, LV_LABEL_PART_MAIN, &style_label);
-	
 }
 
-void gui_init(void)
+void gui_init(gui_config_t * config)
 {
+	m_gui_callback = config->event_callback;
+
 	display_dev = device_get_binding(CONFIG_LVGL_DISPLAY_DEV_NAME);
 
 	if (display_dev == NULL) {
