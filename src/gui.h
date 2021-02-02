@@ -5,6 +5,8 @@
 
 typedef enum {GUI_EVT_BUTTON_PRESSED} gui_event_type_t;
 
+typedef enum {GUI_STATE_IDLE, GUI_STATE_ADVERTISING, GUI_STATE_CONNECTED} gui_state_t;
+
 typedef struct
 {
 	gui_event_type_t evt_type;
@@ -23,7 +25,7 @@ void gui_init(gui_config_t * config);
 
 void gui_update(void);
 
-void gui_set_bt_state(const char * bt_state_str);
+void gui_set_bt_state(gui_state_t state);
 
 void gui_set_bt_led_state(bool led_on);
 

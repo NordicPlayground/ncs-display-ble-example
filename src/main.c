@@ -24,12 +24,12 @@ static void on_app_ble_event(app_ble_event_data_t * evt_data)
 	switch(evt_data->type) {
 		case APP_BLE_CONNECTED:
 			printk("Connected\n");
-			gui_set_bt_state("Connected");
+			gui_set_bt_state(GUI_STATE_CONNECTED);
 			break;
 
 		case APP_BLE_DISCONNECTED:
 			printk("Disconnected\n");
-			gui_set_bt_state("Advertising");
+			gui_set_bt_state(GUI_STATE_ADVERTISING);
 
 			app_ble_start_advertising();
 			break;
@@ -61,7 +61,9 @@ void main(void)
 
 	app_ble_start_advertising();
 
-	gui_set_bt_state("Advertising");
+	printk("Advertising started\n");
+
+	gui_set_bt_state(GUI_STATE_ADVERTISING);
 
 	while (1) {
 		if(change_led_state != 0) {
