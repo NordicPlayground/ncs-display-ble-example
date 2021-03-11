@@ -20,6 +20,10 @@ static gui_callback_t m_gui_callback = 0;
 // Create a message queue for handling external GUI commands
 K_MSGQ_DEFINE(m_gui_cmd_queue, sizeof(gui_message_t), 8, 4);
 
+// Define a timer to update the GUI periodically
+static void on_gui_blink_timer(struct k_timer *dummy);
+K_TIMER_DEFINE(gui_blink_timer, on_gui_blink_timer, NULL);
+
 char *on_off_strings[2] = {"On", "Off"};
 
 // GUI objects
@@ -276,17 +280,27 @@ static void set_bt_state(gui_bt_state_t state)
 	bool connected = false;
 	switch(state){
 		case GUI_BT_STATE_IDLE:
+			k_timer_stop(&gui_blink_timer);
 			lv_label_set_text(label_bt_state, "Idle");
 			break;
 		case GUI_BT_STATE_ADVERTISING:
+			k_timer_start(&gui_blink_timer, K_MSEC(500), K_MSEC(500));
 			lv_label_set_text(label_bt_state, "Advertising");
 			break;
 		case GUI_BT_STATE_CONNECTED:
+			k_timer_stop(&gui_blink_timer);
 			lv_label_set_text(label_bt_state, "Connected");
 			connected = true;
 			break;
 	}
 	gui_show_connected_elements(connected);
+}
+
+static void on_gui_blink_timer(struct k_timer *dummy)
+{
+	static bool blink_state;
+	blink_state = !blink_state;
+	lv_label_set_text(label_bt_state, blink_state ? "Advertising" : "");
 }
 
 void gui_init(gui_config_t * config)
