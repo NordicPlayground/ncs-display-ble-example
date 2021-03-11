@@ -17,26 +17,24 @@
 #include <logging/log.h>
 LOG_MODULE_REGISTER(app);
 
-static volatile int change_led_state = 0;
-
 static void on_app_ble_event(app_ble_event_data_t * evt_data)
 {
 	switch(evt_data->type) {
 		case APP_BLE_CONNECTED:
 			printk("Connected\n");
-			gui_set_bt_state(GUI_STATE_CONNECTED);
+			gui_set_bt_state(GUI_BT_STATE_CONNECTED);
 			break;
 
 		case APP_BLE_DISCONNECTED:
 			printk("Disconnected\n");
-			gui_set_bt_state(GUI_STATE_ADVERTISING);
+			gui_set_bt_state(GUI_BT_STATE_ADVERTISING);
 
 			app_ble_start_advertising();
 			break;
 
 		case APP_BLE_ON_LED_WRITE:
 			printk("Led %s\n", evt_data->led_state ? "On" : "Off");
-			change_led_state = evt_data->led_state ? 2 : 1;
+			gui_set_bt_led_state(evt_data->led_state);
 			break;
 	}
 }
@@ -48,7 +46,6 @@ void on_gui_event(gui_event_t *event)
 			app_ble_send_button_state(event->button_checked);
 			break;
 	}
-
 }
 
 void main(void)
@@ -63,14 +60,9 @@ void main(void)
 
 	printk("Advertising started\n");
 
-	gui_set_bt_state(GUI_STATE_ADVERTISING);
+	gui_set_bt_state(GUI_BT_STATE_ADVERTISING);
 
 	while (1) {
-		if(change_led_state != 0) {
-			gui_set_bt_led_state(change_led_state == 2);
-			change_led_state = 0;
-		}
-		gui_update();
-		k_sleep(K_MSEC(20));
+		k_sleep(K_MSEC(1000));
 	}
 }

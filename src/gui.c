@@ -1,4 +1,5 @@
 #include "gui.h"
+#include <zephyr.h>
 #include <device.h>
 #include <drivers/display.h>
 #include <lvgl.h>
@@ -15,6 +16,9 @@ const struct device *display_dev;
 
 static gui_event_t m_gui_event;
 static gui_callback_t m_gui_callback = 0;
+
+// Create a message queue for handling external GUI commands
+K_MSGQ_DEFINE(m_gui_cmd_queue, sizeof(gui_message_t), 8, 4);
 
 char *on_off_strings[2] = {"On", "Off"};
 
@@ -267,46 +271,17 @@ static void gui_show_connected_elements(bool connected)
 	lv_obj_set_hidden(label_led_state, !connected);
 }
 
-void gui_init(gui_config_t * config)
-{
-	m_gui_callback = config->event_callback;
-
-	display_dev = device_get_binding(CONFIG_LVGL_DISPLAY_DEV_NAME);
-
-	if (display_dev == NULL) {
-		LOG_ERR("device not found.  Aborting test.");
-		return;
-	}
-
-	init_styles();
-
-	init_blinky_gui();
-
-	lv_task_handler();
-	display_blanking_off(display_dev);
-}
-
-void gui_update(void)
-{
-	if ((count % 100) == 0U) {
-
-	}
-	lv_task_handler();
-	++count;
-}
-
-void gui_set_bt_state(gui_state_t state)
+static void set_bt_state(gui_bt_state_t state)
 {
 	bool connected = false;
-	switch(state)
-	{
-		case GUI_STATE_IDLE:
+	switch(state){
+		case GUI_BT_STATE_IDLE:
 			lv_label_set_text(label_bt_state, "Idle");
 			break;
-		case GUI_STATE_ADVERTISING:
+		case GUI_BT_STATE_ADVERTISING:
 			lv_label_set_text(label_bt_state, "Advertising");
 			break;
-		case GUI_STATE_CONNECTED:
+		case GUI_BT_STATE_CONNECTED:
 			lv_label_set_text(label_bt_state, "Connected");
 			connected = true;
 			break;
@@ -314,8 +289,67 @@ void gui_set_bt_state(gui_state_t state)
 	gui_show_connected_elements(connected);
 }
 
+void gui_init(gui_config_t * config)
+{
+	m_gui_callback = config->event_callback;
+}
+
+void gui_set_bt_state(gui_bt_state_t state)
+{
+	static gui_message_t set_bt_state_msg;
+	set_bt_state_msg.type = GUI_MSG_SET_BT_STATE;
+	set_bt_state_msg.params.bt_state = state;
+	k_msgq_put(&m_gui_cmd_queue, &set_bt_state_msg, K_NO_WAIT);
+}
+
 void gui_set_bt_led_state(bool led_is_on)
 {
-	lv_img_set_src(image_led, led_is_on ? &led_on : &led_off);
-	lv_label_set_text(label_led_state, led_is_on ? "On" : "Off");
+	static gui_message_t set_led_state_msg;
+	set_led_state_msg.type = GUI_MSG_SET_LED_STATE;
+	set_led_state_msg.params.led_state = led_is_on;
+	k_msgq_put(&m_gui_cmd_queue, &set_led_state_msg, K_NO_WAIT);
 }
+
+static void process_cmd_msg_queue(void)
+{
+	gui_message_t cmd_message;
+	while(k_msgq_get(&m_gui_cmd_queue, &cmd_message, K_NO_WAIT) == 0){
+		// Process incoming commands depending on type
+		switch(cmd_message.type){
+			case GUI_MSG_SET_STATE:
+				break;
+			case GUI_MSG_SET_BT_STATE:
+				set_bt_state(cmd_message.params.bt_state);
+				break;
+			case GUI_MSG_SET_LED_STATE:
+				lv_img_set_src(image_led, cmd_message.params.led_state ? &led_on : &led_off);
+				lv_label_set_text(label_led_state, cmd_message.params.led_state ? "On" : "Off");
+				break;
+		}
+	}
+}
+
+void gui_run(void)
+{
+	display_dev = device_get_binding(CONFIG_LVGL_DISPLAY_DEV_NAME);
+
+	if (display_dev == NULL) {
+		LOG_ERR("Display device not found!");
+		return;
+	}
+
+	init_styles();
+
+	init_blinky_gui();
+
+	display_blanking_off(display_dev);
+
+	while(1){
+		process_cmd_msg_queue();
+		lv_task_handler();
+		k_sleep(K_MSEC(20));
+	}
+}
+
+// Define our GUI thread, using a stack size of 4096 and a priority of 7
+K_THREAD_DEFINE(gui_thread, 4096, gui_run, NULL, NULL, NULL, 7, 0, 0);
