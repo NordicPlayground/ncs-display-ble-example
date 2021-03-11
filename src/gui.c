@@ -102,6 +102,7 @@ static void init_styles(void)
 	lv_style_init(&style_con_bg);
 	lv_style_copy(&style_con_bg, &style_header);
 	lv_style_set_bg_color(&style_con_bg, LV_STATE_DEFAULT, LV_COLOR_MAKE(0x69, 0xb0, 0x5a));
+	lv_style_set_bg_opa(&style_con_bg, LV_STATE_DEFAULT, LV_OPA_50);
 	lv_style_set_radius(&style_header, LV_STATE_DEFAULT, 4);
 	
 	/*Create a label style*/
