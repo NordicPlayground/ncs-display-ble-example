@@ -22,7 +22,8 @@ NOTE: The current version of the nrf5340 board files in Zephyr does not fully su
 
 ### Building and Running
 
-TBD
+Build the example as normal (setting the shield explicitly is not necessary, as this is configured in the CMakeLists.txt file):
+*west build -b nrf5340dk_nrf5340_cpuapp
 
 ### LVGL documentation
 
